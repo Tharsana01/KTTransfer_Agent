@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sky Q Sat Digital Journey — Order Flow</title>
+<style>
+  :root{
+    --bg: #0a0e14;
+    --panel: #0f1420;
+    --grid-line: #161d2b;
+    --text: #dbe4f0;
+    --text-dim: #6b7688;
+
+    --c-root: #a78bfa;
+    --c-root-glow: rgba(167,139,250,0.55);
+    --c-phase: #5aa9ff;
+    --c-phase-glow: rgba(90,169,255,0.5);
+    --c-sub: #2dd4bf;
+    --c-sub-glow: rgba(45,212,191,0.5);
+    --c-leaf: #86efac;
+    --c-leaf-glow: rgba(134,239,172,0.45);
+    --c-system: #ffb454;
+    --c-system-glow: rgba(255,180,84,0.6);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:
+      radial-gradient(ellipse at 15% 10%, rgba(90,90,140,0.10), transparent 55%),
+      radial-gradient(ellipse at 85% 90%, rgba(45,150,140,0.08), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    overflow:hidden;
+  }
+
+  .app{
+    display:flex; flex-direction:column; height:100vh; width:100vw;
+  }
+
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 28px;
+    border-bottom:1px solid var(--grid-line);
+    background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+    flex-shrink:0;
+  }
+
+  .title-block{ display:flex; flex-direction:column; gap:2px; }
+  .eyebrow{
+    font-size:11px; letter-spacing:2.5px; text-transform:uppercase;
+    color:var(--text-dim); font-weight:600;
+  }
+  .title{
+    font-size:19px; font-weight:600; color:var(--text);
+    letter-spacing:0.2px;
+  }
+
+  .controls{ display:flex; align-items:center; gap:10px; }
+
+  button{
+    font-family:inherit; font-size:13px; font-weight:600;
+    color:var(--text); background:var(--panel);
+    border:1px solid var(--grid-line);
+    padding:9px 16px; border-radius:8px; cursor:pointer;
+    letter-spacing:0.3px;
+    transition:border-color .2s, box-shadow .2s, transform .1s;
+  }
+  button:hover{ border-color:var(--c-phase); box-shadow:0 0 14px rgba(90,169,255,0.25); }
+  button:active{ transform:scale(0.97); }
+  button.primary{
+    background:linear-gradient(135deg, #1b2a4a, #142033);
+    border-color:var(--c-phase);
+  }
+  button.primary:hover{ box-shadow:0 0 20px var(--c-phase-glow); }
+
+  .legend{
+    display:flex; gap:16px; padding:10px 28px;
+    border-bottom:1px solid var(--grid-line);
+    font-size:11px; color:var(--text-dim); flex-shrink:0;
+  }
+  .legend-item{ display:flex; align-items:center; gap:6px; }
+  .legend-dot{ width:8px; height:8px; border-radius:50%; }
+
+  .canvas-wrap{
+    flex:1; position:relative; overflow:auto;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size:34px 34px;
+    background-position:-1px -1px;
+  }
+
+  #canvas{ position:relative; }
+
+  svg.connectors{ position:absolute; top:0; left:0; overflow:visible; pointer-events:none; }
+  svg.connectors path{
+    fill:none; stroke-width:1.6;
+    stroke-dasharray:600; stroke-dashoffset:600;
+    transition: stroke .25s;
+  }
+  svg.connectors path.drawn{
+    animation: draw 0.55s ease forwards;
+  }
+  @keyframes draw{ to{ stroke-dashoffset:0; } }
+
+  .node{
+    position:absolute;
+    padding:10px 16px;
+    border-radius:10px;
+    border:1px solid;
+    font-size:13px; font-weight:600;
+    white-space:nowrap;
+    cursor:default;
+    background:var(--panel);
+    opacity:0; transform:translateY(6px) scale(0.94);
+    transition: top .45s cubic-bezier(.22,.68,.35,1),
+                left .45s cubic-bezier(.22,.68,.35,1),
+                box-shadow .2s, border-color .2s, filter .2s;
+    user-select:none;
+  }
+  .node.shown{
+    opacity:1; transform:translateY(0) scale(1);
+    transition: top .45s cubic-bezier(.22,.68,.35,1),
+                left .45s cubic-bezier(.22,.68,.35,1),
+                opacity .4s ease, transform .4s cubic-bezier(.34,1.4,.64,1),
+                box-shadow .2s, border-color .2s, filter .2s;
+  }
+  .node.dim{ filter:opacity(0.28) saturate(0.5); }
+
+  .node.level-0{
+    border-color:var(--c-root); color:#f1eaff;
+    box-shadow:0 0 22px var(--c-root-glow), inset 0 0 12px rgba(167,139,250,0.08);
+    font-size:15px; padding:14px 22px;
+  }
+  .node.level-1{
+    border-color:var(--c-phase); color:#eaf3ff;
+    box-shadow:0 0 16px var(--c-phase-glow);
+    cursor:pointer;
+  }
+  .node.level-2{
+    border-color:var(--c-sub); color:#e3fbf7;
+    box-shadow:0 0 12px var(--c-sub-glow);
+  }
+  .node.level-2.has-children{ cursor:pointer; }
+  .node.level-3{
+    border-color:var(--c-leaf); color:#eafff0;
+    box-shadow:0 0 10px var(--c-leaf-glow);
+    font-weight:500;
+  }
+  .node.system{
+    border-color:var(--c-system); color:#fff3e0;
+    box-shadow:0 0 12px var(--c-system-glow);
+    animation: pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ box-shadow:0 0 10px var(--c-system-glow); }
+    50%{ box-shadow:0 0 22px var(--c-system-glow); }
+  }
+
+  .node:hover{ filter:brightness(1.15); }
+
+  .expander{
+    display:inline-block; margin-right:6px; font-size:10px;
+    color:var(--text-dim); transition:transform .25s;
+  }
+  .expander.open{ transform:rotate(90deg); }
+
+  .hint{
+    position:absolute; bottom:16px; left:28px;
+    font-size:11px; color:var(--text-dim);
+    letter-spacing:0.3px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title-block">
+      <span class="eyebrow">Sky Germany · Assisted Journey</span>
+      <span class="title">Sky Q Sat Digital Journey — Order Flow</span>
+    </div>
+    <div class="controls">
+      <button id="expandAllBtn">Expand all</button>
+      <button id="resetBtn">Collapse all</button>
+      <button id="playBtn" class="primary">▶ Play full flow</button>
+    </div>
+  </header>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot" style="background:var(--c-root);box-shadow:0 0 6px var(--c-root)"></span>Journey</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--c-phase);box-shadow:0 0 6px var(--c-phase)"></span>Phase</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--c-sub);box-shadow:0 0 6px var(--c-sub)"></span>Step</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--c-leaf);box-shadow:0 0 6px var(--c-leaf)"></span>Detail</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--c-system);box-shadow:0 0 6px var(--c-system)"></span>Backend / system touchpoint</div>
+  </div>
+
+  <div class="canvas-wrap">
+    <div id="canvas">
+      <svg class="connectors" id="svgLayer"></svg>
+    </div>
+    <div class="hint">Click a phase or step node to expand · hover to trace a branch</div>
+  </div>
+</div>
+
+<script>
+const treeData = {
+  id:'root', name:'Sky Q Sat Digital Journey', level:0, expanded:true,
+  children:[
+    { id:'offer', name:'Offer Selection', level:1, expanded:false, children:[
+      { id:'offer-1', name:'Angebote page', level:2 },
+      { id:'offer-2', name:'12m or 24m contracts', level:2 }
+    ]},
+    { id:'pkg', name:'Package Configuration', level:1, expanded:false, children:[
+      { id:'pkg-1', name:'Mandatory packages', level:2 },
+      { id:'pkg-2', name:'Optional packages', level:2 },
+      { id:'pkg-3', name:'Addons', level:2, expanded:false, children:[
+        { id:'pkg-3-1', name:'Kids & Netflix', level:3 },
+        { id:'pkg-3-2', name:'Multiscreen includes Sky-go-plus', level:3 },
+        { id:'pkg-3-3', name:'Trend sports for Sky-Q', level:3 }
+      ]}
+    ]},
+    { id:'basket', name:'Basket & Pricing', level:1, expanded:false, children:[
+      { id:'basket-1', name:'Price Summary Bar', level:2, expanded:false, children:[
+        { id:'basket-1-1', name:'Monthly total', level:3 },
+        { id:'basket-1-2', name:'Onetime fees', level:3 },
+        { id:'basket-1-3', name:'Detailed line items', level:3 }
+      ]},
+      { id:'basket-2', name:'Order Overview', level:2, expanded:false, children:[
+        { id:'basket-2-1', name:'Bestellübersicht page', level:3 },
+        { id:'basket-2-2', name:'Contract terms', level:3 },
+        { id:'basket-2-3', name:'Warenkorb anzeigen link', level:3 }
+      ]}
+    ]},
+    { id:'cust', name:'Customer Details', level:1, expanded:false, children:[
+      { id:'cust-1', name:'Satellite reception', level:2 },
+      { id:'cust-2', name:'Account creation', level:2 },
+      { id:'cust-3', name:'Verification', level:2, expanded:false, children:[
+        { id:'cust-3-1', name:'Address & City', level:3 },
+        { id:'cust-3-2', name:'Age ID verification', level:3 },
+        { id:'cust-3-3', name:'SEPA Mandate IBAN', level:3, system:true }
+      ]}
+    ]},
+    { id:'final', name:'Finalization', level:1, expanded:false, children:[
+      { id:'final-1', name:'Email verification', level:2 },
+      { id:'final-2', name:'Order placement', level:2 },
+      { id:'final-3', name:'Backend Validation', level:2, expanded:false, children:[
+        { id:'final-3-1', name:'Salesforce active status', level:3, system:true },
+        { id:'final-3-2', name:'Tibco plan fragments', level:3, system:true }
+      ]}
+    ]}
+  ]
+};
+
+const COL_WIDTH = 300;
+const ROW_HEIGHT = 56;
+const START_X = 30;
+const START_Y = 40;
+
+const canvas = document.getElementById('canvas');
+const svgLayer = document.getElementById('svgLayer');
+const nodeEls = new Map();
+const pathEls = new Map();
+let leafCounter = 0;
+
+function byId(id){ return document.getElementById(id); }
+
+function collectVisible(node, depth, acc){
+  acc.push(node);
+  if(node.children && node.expanded){
+    node.children.forEach(c => collectVisible(c, depth+1, acc));
+  }
+}
+
+// Assign y positions: leaves get sequential slots, parents = avg of children
+function layout(node){
+  if(!node.children || !node.expanded){
+    node._y = leafCounter * ROW_HEIGHT;
+    leafCounter++;
+  } else {
+    node.children.forEach(layout);
+    const ys = node.children.map(c => c._y);
+    node._y = (Math.min(...ys) + Math.max(...ys)) / 2;
+  }
+  node._x = node.level * COL_WIDTH + START_X;
+}
+
+function ensureNodeEl(node){
+  let el = nodeEls.get(node.id);
+  if(el) return el;
+  el = document.createElement('div');
+  el.className = 'node level-' + node.level + (node.system ? ' system' : '');
+  if(node.children) el.classList.add('has-children');
+
+  let label = '';
+  if(node.children){
+    label += `<span class="expander ${node.expanded ? 'open':''}">▶</span>`;
+  }
+  label += node.name;
+  el.innerHTML = label;
+
+  el.addEventListener('click', () => {
+    if(!node.children) return;
+    node.expanded = !node.expanded;
+    render(true);
+  });
+  el.addEventListener('mouseenter', () => highlightBranch(node.id, true));
+  el.addEventListener('mouseleave', () => highlightBranch(node.id, false));
+
+  canvas.appendChild(el);
+  nodeEls.set(node.id, el);
+  return el;
+}
+
+function highlightBranch(nodeId, on){
+  if(!on){
+    nodeEls.forEach(el => el.classList.remove('dim'));
+    pathEls.forEach(p => { p.style.stroke = p.dataset.baseColor; p.style.opacity = 1; });
+    return;
+  }
+  const related = new Set([nodeId]);
+  pathEls.forEach((p, key) => {
+    const [from, to] = key.split('__');
+    if(from === nodeId || to === nodeId){ related.add(from); related.add(to); }
+  });
+  nodeEls.forEach((el, id) => {
+    el.classList.toggle('dim', !related.has(id));
+  });
+  pathEls.forEach((p, key) => {
+    const [from, to] = key.split('__');
+    const active = from === nodeId || to === nodeId;
+    p.style.opacity = active ? 1 : 0.15;
+  });
+}
+
+function colorFor(level){
+  return ['var(--c-root)','var(--c-phase)','var(--c-sub)','var(--c-leaf)'][level] || 'var(--c-leaf)';
+}
+
+function render(animateNew){
+  leafCounter = 0;
+  layout(treeData);
+
+  const visible = [];
+  collectVisible(treeData, 0, visible);
+  const visibleIds = new Set(visible.map(n => n.id));
+
+  // remove nodes no longer visible
+  nodeEls.forEach((el, id) => {
+    if(!visibleIds.has(id)){
+      el.classList.remove('shown');
+      setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 300);
+      nodeEls.delete(id);
+    }
+  });
+
+  let maxY = 0, maxX = 0;
+  visible.forEach(node => {
+    const el = ensureNodeEl(node);
+    const exp = el.querySelector('.expander');
+    if(exp) exp.classList.toggle('open', !!node.expanded);
+    el.style.left = node._x + 'px';
+    el.style.top = node._y + START_Y + 'px';
+    requestAnimationFrame(() => el.classList.add('shown'));
+    maxY = Math.max(maxY, node._y + START_Y);
+    maxX = Math.max(maxX, node._x);
+  });
+
+  canvas.style.height = (maxY + 100) + 'px';
+  canvas.style.width = (maxX + COL_WIDTH) + 'px';
+  svgLayer.setAttribute('width', maxX + COL_WIDTH);
+  svgLayer.setAttribute('height', maxY + 100);
+
+  drawConnectors(visible, visibleIds, animateNew);
+}
+
+function drawConnectors(visible, visibleIds, animateNew){
+  const activeKeys = new Set();
+  visible.forEach(node => {
+    if(!node.children || !node.expanded) return;
+    node.children.forEach(child => {
+      if(!visibleIds.has(child.id)) return;
+      const key = node.id + '__' + child.id;
+      activeKeys.add(key);
+      let path = pathEls.get(key);
+      const x1 = node._x + 160, y1 = node._y + START_Y + 16;
+      const x2 = child._x, y2 = child._y + START_Y + 16;
+      const mx = (x1 + x2) / 2;
+      const d = `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+      const color = colorFor(node.level);
+
+      if(!path){
+        path = document.createElementNS('http://www.w3.org/2000/svg','path');
+        path.dataset.baseColor = color;
+        path.style.stroke = color;
+        path.setAttribute('d', d);
+        svgLayer.appendChild(path);
+        pathEls.set(key, path);
+        if(animateNew){
+          requestAnimationFrame(() => path.classList.add('drawn'));
+        } else {
+          path.classList.add('drawn');
+          path.style.strokeDashoffset = 0;
+        }
+      } else {
+        path.setAttribute('d', d);
+      }
+    });
+  });
+
+  pathEls.forEach((path, key) => {
+    if(!activeKeys.has(key)){
+      path.remove();
+      pathEls.delete(key);
+    }
+  });
+}
+
+function setAllExpanded(node, val){
+  if(node.children){
+    node.expanded = val;
+    node.children.forEach(c => setAllExpanded(c, val));
+  }
+}
+
+byId('expandAllBtn').addEventListener('click', () => {
+  setAllExpanded(treeData, true);
+  render(true);
+});
+byId('resetBtn').addEventListener('click', () => {
+  setAllExpanded(treeData, false);
+  render(true);
+});
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+async function playFullFlow(){
+  setAllExpanded(treeData, false);
+  render(false);
+  await sleep(300);
+  const phases = treeData.children;
+  for(const phase of phases){
+    phase.expanded = true;
+    render(true);
+    await sleep(650);
+  }
+}
+byId('playBtn').addEventListener('click', playFullFlow);
+
+// initial render: root only, then reveal phases in sequence
+render(false);
+setTimeout(playFullFlow, 400);
+</script>
+</body>
+</html>
